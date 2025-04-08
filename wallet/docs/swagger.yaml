@@ -1,0 +1,332 @@
+basePath: /api/v1
+definitions:
+  http.BalanceResponse:
+    properties:
+      balance:
+        additionalProperties:
+          type: number
+        example:
+          EUR: 1.5
+          RUB: 15
+          USD: 20
+        type: object
+    type: object
+  http.DepositRequest:
+    properties:
+      amount:
+        example: 15
+        type: number
+      currency:
+        example: USD
+        type: string
+    required:
+    - amount
+    - currency
+    type: object
+  http.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  http.ExchangeRequest:
+    properties:
+      amount:
+        example: 15
+        type: number
+      from_currency:
+        example: USD
+        type: string
+      to_currency:
+        example: RUB
+        type: string
+    required:
+    - amount
+    - from_currency
+    - to_currency
+    type: object
+  http.ExchangeResponse:
+    properties:
+      exchanged_amount:
+        example: 15
+        type: number
+      message:
+        type: string
+      new_balance:
+        additionalProperties:
+          type: number
+        example:
+          EUR: 1.5
+          RUB: 15
+          USD: 20
+        type: object
+    type: object
+  http.GetRatesResponse:
+    properties:
+      rates:
+        additionalProperties:
+          type: number
+        example:
+          EUR: 0.85
+          RUB: 0.1
+          USD: 1
+        type: object
+    type: object
+  http.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  http.LoginResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  http.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+  http.SuccessResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  http.UpdatedBalanceResponse:
+    properties:
+      message:
+        type: string
+      new_balance:
+        additionalProperties:
+          type: number
+        example:
+          EUR: 1.5
+          RUB: 15
+          USD: 20
+        type: object
+    type: object
+  http.WithdrawRequest:
+    properties:
+      amount:
+        example: 15
+        type: number
+      currency:
+        example: USD
+        type: string
+    required:
+    - amount
+    - currency
+    type: object
+info:
+  contact: {}
+  description: This is the API for managing wallets and performing actions like deposits,
+    withdrawals, and exchange rates.
+  title: Wallet API
+  version: "1.0"
+paths:
+  /balance:
+    get:
+      consumes:
+      - application/json
+      description: Get the balance of a user by their token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.BalanceResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the balance of a user
+      tags:
+      - wallet
+  /exchange:
+    post:
+      consumes:
+      - application/json
+      description: Exchange one currency for another in the user's wallet
+      parameters:
+      - description: Exchange data
+        in: body
+        name: exchangeRequest
+        required: true
+        schema:
+          $ref: '#/definitions/http.ExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.ExchangeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Exchange one currency for another
+      tags:
+      - wallet
+  /exchange/rates:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve exchange rates for different currencies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.GetRatesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      summary: Get exchange rates
+      tags:
+      - wallet
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Login a user and return an authentication token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: loginRequest
+        required: true
+        schema:
+          $ref: '#/definitions/http.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      summary: Login a user
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with username, password, and email
+      parameters:
+      - description: Registration data
+        in: body
+        name: registerRequest
+        required: true
+        schema:
+          $ref: '#/definitions/http.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/http.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - auth
+  /wallet/deposit:
+    post:
+      consumes:
+      - application/json
+      description: Deposit a specified amount of money into the user's wallet
+      parameters:
+      - description: Deposit data
+        in: body
+        name: depositRequest
+        required: true
+        schema:
+          $ref: '#/definitions/http.DepositRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.UpdatedBalanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Deposit money into the user's wallet
+      tags:
+      - wallet
+  /wallet/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Withdraw a specified amount of money from the user's wallet
+      parameters:
+      - description: Withdraw data
+        in: body
+        name: withdrawRequest
+        required: true
+        schema:
+          $ref: '#/definitions/http.WithdrawRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.UpdatedBalanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Withdraw money from the user's wallet
+      tags:
+      - wallet
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

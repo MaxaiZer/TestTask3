@@ -1,0 +1,95 @@
+services:
+  exchanger:
+    build:
+      context: .
+      dockerfile: ./exchanger/Dockerfile
+    environment:
+      SERVICE_NAME: exchanger-service
+      PORT: ${EXCHANGER_PORT}
+      DB_URL: postgres://$DB_USER:$DB_PASSWORD@db:$DB_PORT/$DB_NAME?sslmode=$DB_SSL_MODE
+      MIGRATIONS_PATH: file://migrations
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${EXCHANGER_PORT}:${EXCHANGER_PORT}"
+
+  wallet:
+    build:
+      context: .
+      dockerfile: ./wallet/Dockerfile
+    environment:
+      SERVICE_NAME: wallet-service
+      PORT: ${WALLET_PORT}
+      EXCHANGER_URL: exchanger:${EXCHANGER_PORT}
+      DB_URL: postgres://$DB_USER:$DB_PASSWORD@db:$DB_PORT/$DB_NAME?sslmode=$DB_SSL_MODE
+      MIGRATIONS_PATH: file://migrations
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      exchanger:
+        condition: service_started
+      jaeger:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${WALLET_PORT}:${WALLET_PORT}"
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DB_PORT}:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5540:5540"
+    volumes:
+      - redisinsight_data:/data
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "127.0.0.1:16686:16686"  # web-ui
+      - "127.0.0.1:4317:4317"    # otlp grpc - http://jaeger:4317/v1/traces
+      - "127.0.0.1:4318:4318"    # otlp http - http://jaeger:4318/v1/traces
+
+volumes:
+  pg_data:
+  redis_data:
+  redisinsight_data:

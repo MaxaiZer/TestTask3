@@ -1,0 +1,25 @@
+syntax="proto3";
+
+import "google/protobuf/empty.proto";
+
+package exchange;
+
+option go_package = "grpc/exchange";
+
+service Exchange {
+  rpc GetExchangeRates(google.protobuf.Empty) returns (ExchangeRatesResponse);
+  rpc GetExchangeRateForOne(ExchangeRateRequest) returns (ExchangeRateResponse);
+}
+
+message ExchangeRatesResponse {
+  map<string, double> rates = 1;
+}
+
+message ExchangeRateResponse  {
+  double rate = 1;
+}
+
+message ExchangeRateRequest {
+  string from_currency = 1;
+  string to_currency = 2;
+}

@@ -1,0 +1,164 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+	"log/slog"
+	"net"
+	"os"
+	"sync"
+	"test-task/api/gen/grpc/exchange"
+	"test-task/exchanger/internal/config"
+	"test-task/exchanger/internal/services"
+	"test-task/exchanger/internal/storage/postgres"
+	mygrpc "test-task/exchanger/internal/transport/grpc"
+	"time"
+)
+
+type App struct {
+	cfg       *config.Config
+	server    *grpc.Server
+	listener  net.Listener
+	shutdowns []func(context.Context) error
+}
+
+func New() (*App, error) {
+
+	var shutdowns []func(context.Context) error
+
+	cfg, err := config.Get()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+	slog.Info("current environment", "env", cfg.Env)
+
+	initLogger(cfg)
+
+	storage, connector, err := InitDB(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	shutdowns = append(shutdowns, func(_ context.Context) error { connector.Close(); return nil })
+
+	tracer, err := initTracer(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize tracer: %w", err)
+	}
+
+	shutdowns = append(shutdowns, tracer.Shutdown)
+
+	server := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
+	reflection.Register(server)
+
+	exchangeService := services.NewExchangeService(storage)
+	exchangeServer := mygrpc.NewExchangeServer(exchangeService)
+
+	exchange.RegisterExchangeServer(server, exchangeServer)
+
+	listener, err := net.Listen("tcp", ":"+cfg.Port)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create port listener: %w", err)
+	}
+	return &App{cfg: cfg, server: server, listener: listener, shutdowns: shutdowns}, nil
+}
+
+func (a *App) Run() {
+	if err := a.server.Serve(a.listener); err != nil {
+		slog.Error("failed to serve grpc server", "error", err)
+		os.Exit(1)
+	}
+}
+
+func (a *App) Stop(ctx context.Context) {
+
+	slog.Info("shutting down gracefully...")
+
+	a.server.GracefulStop()
+	slog.Info("grpc server gracefully stopped")
+
+	wg := &sync.WaitGroup{}
+	for _, shutdown := range a.shutdowns {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := shutdown(ctx); err != nil {
+				slog.Error("failed to shutdown gracefully", "error", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+	slog.Info("application stopped")
+}
+
+func initLogger(cfg *config.Config) {
+	var handler slog.Handler
+
+	if cfg.Env == config.Production {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+	}
+
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+}
+
+func InitDB(cfg *config.Config) (*postgres.Storage, *postgres.Connector, error) {
+	connector, err := postgres.NewConnector(context.Background(), cfg.DbUrl)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize postgres connector: %w", err)
+	}
+
+	err = postgres.RunMigrations(connector.DB(), cfg.MigrationsPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	storage, err := postgres.NewStorage(connector.Pool)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize storage: %w", err)
+	}
+
+	return storage, connector, nil
+}
+
+func initTracer(cfg *config.Config) (*trace.TracerProvider, error) {
+	ctx := context.Background()
+
+	otel.SetTextMapPropagator(
+		propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	)
+
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(cfg.OtelEndpoint),
+		otlptracegrpc.WithInsecure(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create otel exporter: %w", err)
+	}
+
+	traceProvider := trace.NewTracerProvider(
+		trace.WithBatcher(exporter, trace.WithBatchTimeout(time.Second)),
+		trace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(cfg.ServiceName),
+		)),
+	)
+
+	otel.SetTracerProvider(traceProvider)
+	return traceProvider, nil
+}

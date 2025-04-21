@@ -180,7 +180,7 @@ func (p *Storage) changeAccountAmount(ctx context.Context, executor executor, us
 	}
 
 	if res.RowsAffected() == 0 {
-		return fmt.Errorf("failed to change amount, account wasn't found")
+		return errs.InsufficientFunds
 	}
 	return nil
 }

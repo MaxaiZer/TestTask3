@@ -111,3 +111,20 @@ func TestWithdraw_InsufficientFunds(t *testing.T) {
 
 	assert.Equal(t, req1.Amount, balance.Balance[req1.Currency])
 }
+
+func TestWithdraw_NoAccountInThisCurrency(t *testing.T) {
+
+	token := getToken(t)
+
+	req2 := myhttp.WithdrawRequest{
+		Amount:   50,
+		Currency: "USD",
+	}
+
+	resp := mustSend[myhttp.ErrorResponse](t, server, "POST",
+		apiPrefix+"wallet/withdraw", req2, http.StatusBadRequest, func(request *http.Request) {
+			request.Header.Set("Authorization", "Bearer "+token)
+		})
+
+	assert.Equal(t, "Insufficient funds", resp.Error)
+}

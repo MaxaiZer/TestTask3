@@ -41,6 +41,22 @@
 						"type": "text/javascript",
 						"packages": {}
 					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"const randomUsername = 'user_' + Math.random().toString(36).substring(2, 8);\r",
+							"const randomPassword = 'pass_' + Math.random().toString(36).substring(2, 10);\r",
+							"const randomEmail = 'user_' + Math.random().toString(36).substring(2, 8) + '@mail.ru';\r",
+							"\r",
+							"pm.environment.set('username', randomUsername);\r",
+							"pm.environment.set('password', randomPassword);\r",
+							"pm.environment.set('email', randomEmail);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
 				}
 			],
 			"request": {
@@ -48,7 +64,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"username\": \"Max\",\r\n    \"password\": \"1234\",\r\n    \"email\": \"max@mail.com\"\r\n}",
+					"raw": "{\r\n    \"username\": \"{{username}}\",\r\n    \"password\": \"{{password}}\",\r\n    \"email\": \"{{email}}\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -135,7 +151,43 @@
 			"response": []
 		},
 		{
-			"name": "deposit",
+			"name": "deposit USD",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"amount\": 100,\r\n    \"currency\": \"USD\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:5050/api/v1/wallet/deposit",
+					"host": [
+						"localhost"
+					],
+					"port": "5050",
+					"path": [
+						"api",
+						"v1",
+						"wallet",
+						"deposit"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "deposit EUR",
 			"request": {
 				"method": "POST",
 				"header": [
@@ -183,7 +235,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"amount\": 100,\r\n    \"currency\": \"USD\"\r\n}",
+					"raw": "{\r\n    \"amount\": 2,\r\n    \"currency\": \"USD\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"

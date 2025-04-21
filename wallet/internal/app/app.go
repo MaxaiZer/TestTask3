@@ -60,7 +60,7 @@ func New() (*App, error) {
 
 	shutdowns = append(shutdowns, func(_ context.Context) error { return cache.Close() })
 
-	exchanger, err := clients.NewExchangerClient(cfg.ExchangerUrl)
+	exchanger, err := createExchangerClient(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create exchanger client: %w", err)
 	}
@@ -141,6 +141,15 @@ func InitDB(cfg *config.Config) (*postgres.Storage, *postgres.Connector, error) 
 	}
 
 	return storage, connector, nil
+}
+
+func createExchangerClient(cfg *config.Config) (*clients.ExchangerClient, error) {
+	if cfg.ConsulAddress != "" {
+		slog.Info("using consul address", "address", cfg.ConsulAddress)
+		return clients.NewExchangerClientWithConsul(cfg.ConsulAddress)
+	}
+	slog.Info("using exchanger url", "address", cfg.ExchangerUrl)
+	return clients.NewExchangerClient(cfg.ExchangerUrl)
 }
 
 func startServer(cfg *config.Config, auth http.AuthService, wallet http.WalletService) *echo.Echo {

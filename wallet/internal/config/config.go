@@ -25,12 +25,13 @@ type Config struct {
 	JwtLifetime    time.Duration `validate:"required,gt=0"`
 	JwtIssuer      string        `validate:"required"`
 	JwtAudience    string        `validate:"required"`
-	ExchangerUrl   string        `validate:"required"`
-	DbUrl          string        `validate:"required"`
-	MigrationsPath string        `validate:"required"`
-	RedisAddress   string        `validate:"required"`
-	RedisPassword  string        `validate:"required"`
-	OtelEndpoint   string        `validate:"required"`
+	ExchangerUrl   string
+	DbUrl          string `validate:"required"`
+	MigrationsPath string `validate:"required"`
+	RedisAddress   string `validate:"required"`
+	RedisPassword  string `validate:"required"`
+	OtelEndpoint   string `validate:"required"`
+	ConsulAddress  string
 }
 
 var flagSet = false
@@ -62,12 +63,18 @@ func Get() (*Config, error) {
 		RedisAddress:   os.Getenv("REDIS_ADDRESS"),
 		RedisPassword:  os.Getenv("REDIS_PASSWORD"),
 		OtelEndpoint:   os.Getenv("OTEL_ENDPOINT"),
+		ConsulAddress:  os.Getenv("CONSUL_ADDRESS"),
 	}
 
 	validate := validator.New()
 	if err = validate.Struct(cfg); err != nil {
 		return nil, fmt.Errorf("failed to validate config: %w", err)
 	}
+
+	if cfg.ConsulAddress == "" && cfg.ExchangerUrl == "" {
+		return nil, fmt.Errorf("exchangerUrl is required when consulAddress is empty")
+	}
+
 	return &cfg, nil
 }
 

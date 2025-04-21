@@ -66,6 +66,10 @@ swagger сервиса wallet по адресу localhost:5050/swagger (толь
 
 для дебага отдельного сервиса можно поднять в docker-compose всё остальное и запустить его с переменной окружения CONFIG_PATH=configs/config.env
 
+запуск вместе с Consul:
+docker-compose -f docker-compose.yml -f docker-compose.consul.yml up --build
+
 ## Pitfalls
 
-- dns resolving идёт 8 секунд для первого grpc запроса (wtf?). Если в docker-compose ```exchanger:${EXCHANGER_PORT}``` поменять на ```0.0.0.0:${EXCHANGER_PORT}```, то всё норм
+- dns resolving идёт 8 секунд для первого grpc запроса (wtf?). Но если в docker-compose ```EXCHANGER_URL: exchanger:${EXCHANGER_PORT}``` поменять на ```EXCHANGER_URL: 0.0.0.0:${EXCHANGER_PORT}```, то всё норм
+- через consul наоборот - резолвит моментально

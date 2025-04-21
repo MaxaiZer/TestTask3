@@ -2,6 +2,8 @@ package clients
 
 import (
 	"context"
+	"fmt"
+	_ "github.com/mbobakov/grpc-consul-resolver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,6 +22,21 @@ func NewExchangerClient(url string) (*ExchangerClient, error) {
 		url,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	client := exchange.NewExchangeClient(conn)
+	return &ExchangerClient{conn: conn, client: client}, nil
+}
+
+func NewExchangerClientWithConsul(consulAddress string) (*ExchangerClient, error) {
+	conn, err := grpc.NewClient(
+		fmt.Sprintf("consul://%s/%s?wait=14s", consulAddress, "exchanger-service"),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
 	)
 	if err != nil {
 		return nil, err

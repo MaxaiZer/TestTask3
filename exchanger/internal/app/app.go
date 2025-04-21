@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
+	consulapi "github.com/hashicorp/consul/api"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -11,10 +13,13 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"test-task/api/gen/grpc/exchange"
 	"test-task/exchanger/internal/config"
@@ -62,8 +67,17 @@ func New() (*App, error) {
 
 	exchangeService := services.NewExchangeService(storage)
 	exchangeServer := mygrpc.NewExchangeServer(exchangeService)
-
 	exchange.RegisterExchangeServer(server, exchangeServer)
+
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", healthgrpc.HealthCheckResponse_SERVING)
+	healthgrpc.RegisterHealthServer(server, healthServer)
+
+	consulShutdown, err := registerInConsul(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register in consul: %w", err)
+	}
+	shutdowns = append(shutdowns, consulShutdown)
 
 	listener, err := net.Listen("tcp", ":"+cfg.Port)
 	if err != nil {
@@ -161,4 +175,45 @@ func initTracer(cfg *config.Config) (*trace.TracerProvider, error) {
 
 	otel.SetTracerProvider(traceProvider)
 	return traceProvider, nil
+}
+
+func registerInConsul(cfg *config.Config) (func(ctx context.Context) error, error) {
+
+	if cfg.ConsulAddress == "" {
+		return nil, nil
+	}
+
+	client, err := consulapi.NewClient(&consulapi.Config{
+		Address: cfg.ConsulAddress,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create consul client: %w", err)
+	}
+
+	port, _ := strconv.Atoi(cfg.Port)
+	serviceID := fmt.Sprintf("%s-%s", cfg.ServiceName, uuid.NewString())
+	reg := &consulapi.AgentServiceRegistration{
+		ID:      serviceID,
+		Name:    cfg.ServiceName,
+		Port:    port,
+		Address: "exchanger",
+		Check: &consulapi.AgentServiceCheck{
+			GRPC:                           fmt.Sprintf("exchanger:%s", cfg.Port),
+			Interval:                       "10s",
+			DeregisterCriticalServiceAfter: "1m",
+		},
+	}
+
+	err = client.Agent().ServiceRegister(reg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register service in consul: %w", err)
+	}
+
+	slog.Info("registered service in consul", "service", reg.Name, "port", reg.Port)
+
+	shutdown := func(_ context.Context) error {
+		slog.Info("deregistering service from consul", "serviceID", serviceID)
+		return client.Agent().ServiceDeregister(serviceID)
+	}
+	return shutdown, nil
 }

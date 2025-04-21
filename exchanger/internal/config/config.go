@@ -22,6 +22,7 @@ type Config struct {
 	DbUrl          string `validate:"required"`
 	MigrationsPath string `validate:"required"`
 	OtelEndpoint   string `validate:"required"`
+	ConsulAddress  string
 }
 
 var flagSet = false
@@ -41,6 +42,7 @@ func Get() (*Config, error) {
 		DbUrl:          os.Getenv("DB_URL"),
 		MigrationsPath: os.Getenv("MIGRATIONS_PATH"),
 		OtelEndpoint:   os.Getenv("OTEL_ENDPOINT"),
+		ConsulAddress:  os.Getenv("CONSUL_ADDRESS"),
 	}
 
 	validate := validator.New()

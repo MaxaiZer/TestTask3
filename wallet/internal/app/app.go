@@ -18,15 +18,20 @@ import (
 	"test-task/wallet/internal/transport/http"
 )
 
+type shutdownTask struct {
+	name     string
+	shutdown func(context.Context) error
+}
+
 type App struct {
 	cfg       *config.Config
 	server    *echo.Echo
-	shutdowns []func(context.Context) error
+	shutdowns []shutdownTask
 }
 
 func New() (*App, error) {
 
-	var shutdowns []func(context.Context) error
+	var shutdowns []shutdownTask
 
 	cfg, err := config.Get()
 	if err != nil {
@@ -41,14 +46,20 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	shutdowns = append(shutdowns, func(_ context.Context) error { connector.Close(); return nil })
+	shutdowns = append(shutdowns, shutdownTask{
+		name:     "db connection",
+		shutdown: connector.Close,
+	})
 
 	tracer, err := tracing.InitTracer(cfg.ServiceName, cfg.OtelEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize tracer: %w", err)
 	}
 
-	shutdowns = append(shutdowns, tracer.Shutdown)
+	shutdowns = append(shutdowns, shutdownTask{
+		name:     "tracer",
+		shutdown: tracer.Shutdown,
+	})
 
 	cache, err := redis.New(redis.Config{
 		Address:  cfg.RedisAddress,
@@ -58,7 +69,10 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("failed to create redis client: %w", err)
 	}
 
-	shutdowns = append(shutdowns, func(_ context.Context) error { return cache.Close() })
+	shutdowns = append(shutdowns, shutdownTask{
+		name:     "redis",
+		shutdown: cache.Close,
+	})
 
 	exchanger, err := createExchangerClient(cfg)
 	if err != nil {
@@ -101,18 +115,20 @@ func (a *App) Stop(ctx context.Context) {
 	}
 
 	wg := &sync.WaitGroup{}
-	for _, shutdown := range a.shutdowns {
+	for _, task := range a.shutdowns {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := shutdown(ctx); err != nil {
-				slog.Error("failed to shutdown gracefully", "error", err)
+			slog.Info("shutting down task", "name", task.name)
+			if err := task.shutdown(ctx); err != nil {
+				slog.Error("failed to shutdown gracefully", "task", task.name, "error", err)
+			} else {
+				slog.Info("task gracefully stopped", "name", task.name)
 			}
 		}()
 	}
 
 	wg.Wait()
-	slog.Info("application stopped")
 }
 
 func initLogger(cfg *config.Config) {

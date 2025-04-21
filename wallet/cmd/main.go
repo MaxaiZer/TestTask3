@@ -31,4 +31,5 @@ func main() {
 	defer cancel()
 
 	myapp.Stop(shutdownCtx)
+	slog.Info("application stopped")
 }

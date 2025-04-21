@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"strconv"
@@ -88,6 +89,18 @@ func (c *Redis) GetRates(ctx context.Context, base models.Currency) (map[models.
 	return rates, nil
 }
 
-func (c *Redis) Close() error {
-	return c.client.Close()
+func (c *Redis) Close(ctx context.Context) error {
+
+	done := make(chan error, 1)
+	go func() {
+		done <- c.client.Close()
+		close(done)
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("timeout while closing redis client: %w", ctx.Err())
+	}
 }

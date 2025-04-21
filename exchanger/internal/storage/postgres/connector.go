@@ -42,8 +42,18 @@ func (p *Connector) DB() *sql.DB {
 	return stdlib.OpenDBFromPool(p.Pool)
 }
 
-func (p *Connector) Close() {
-	if p.Pool != nil {
+func (p *Connector) Close(ctx context.Context) error {
+
+	done := make(chan struct{})
+	go func() {
 		p.Pool.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("timeout while closing Postgres pool: %w", ctx.Err())
 	}
 }

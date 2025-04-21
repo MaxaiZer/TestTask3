@@ -18,6 +18,7 @@ func RunMigrations(db *sql.DB, migrationsPath string) error {
 	if err != nil {
 		return fmt.Errorf("could not create postgres driver: %w", err)
 	}
+	defer driver.Close()
 
 	m, err := migrate.NewWithDatabaseInstance(
 		migrationsPath,

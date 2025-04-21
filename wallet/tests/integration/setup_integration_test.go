@@ -54,7 +54,11 @@ func setupApp() error {
 	wallet := services.NewWalletService(storage, exchanger, redisMock{})
 	auth := services.NewAuthService(jwt, storage)
 
-	server = http.NewServer(wallet, auth, cfg.JwtSecret)
+	server = http.NewServer(http.Config{
+		ServiceName:   "",
+		JwtSecret:     cfg.JwtSecret,
+		LaunchSwagger: false,
+	}, wallet, auth)
 	return nil
 }
 
